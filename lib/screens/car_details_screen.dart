@@ -26,17 +26,37 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('========== CAR DETAILS SCREEN ==========');
+    debugPrint('Initializing details screen for car: ${widget.car.id}');
+    debugPrint('Car initial data:');
+    debugPrint('  Name: ${widget.car.name}');
+    debugPrint('  Status: ${widget.car.status}');
+    debugPrint('  Speed: ${widget.car.speed} km/h');
+    debugPrint('  Position: (${widget.car.latitude}, ${widget.car.longitude})');
+    debugPrint('  Last Updated: ${widget.car.lastUpdated}');
+
+    // Log potential issues with coordinates
+    if (widget.car.latitude == 0.0 && widget.car.longitude == 0.0) {
+      debugPrint(
+          'WARNING: Car has default coordinates (0,0) - this may indicate missing or invalid location data');
+    }
+
     _updateMarker();
   }
 
   @override
   void dispose() {
+    debugPrint('Disposing CarDetailsScreen for car: ${widget.car.id}');
     _stopTracking();
     _mapController?.dispose();
     super.dispose();
   }
 
   void _updateMarker() {
+    debugPrint('Updating marker for car: ${widget.car.id}');
+    debugPrint(
+        'Current position: (${widget.car.latitude}, ${widget.car.longitude})');
+
     setState(() {
       _markers = {
         Marker(
@@ -52,24 +72,46 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
         ),
       };
     });
+    debugPrint('Marker updated. Marker count: ${_markers.length}');
   }
 
   void _startTracking() {
-    if (_isTracking) return;
+    debugPrint('Starting tracking for car: ${widget.car.id}');
+    if (_isTracking) {
+      debugPrint('Tracking already active - ignoring request');
+      return;
+    }
 
     setState(() {
       _isTracking = true;
     });
 
+    debugPrint('Setting selected car in provider to ID: ${widget.car.id}');
     Provider.of<CarProvider>(context, listen: false)
         .setSelectedCar(widget.car.id);
 
     // Update the car's position on the map every second
-    _trackingTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    debugPrint('Setting up periodic tracking timer (1 second interval)');
+    _trackingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      debugPrint('Tracking timer tick for car: ${widget.car.id}');
       final carProvider = Provider.of<CarProvider>(context, listen: false);
       final updatedCar = carProvider.getSelectedCar();
 
       if (updatedCar != null) {
+        debugPrint('Retrieved updated car data:');
+        debugPrint('  ID: ${updatedCar.id}');
+        debugPrint('  Name: ${updatedCar.name}');
+        debugPrint('  Status: ${updatedCar.status}');
+        debugPrint('  Speed: ${updatedCar.speed} km/h');
+        debugPrint(
+            '  Position: (${updatedCar.latitude}, ${updatedCar.longitude})');
+
+        // Check if position actually changed
+        final positionChanged = updatedCar.latitude != widget.car.latitude ||
+            updatedCar.longitude != widget.car.longitude;
+
+        debugPrint('Position changed: $positionChanged');
+
         setState(() {
           _markers = {
             Marker(
@@ -89,27 +131,42 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
         });
 
         // Move camera to follow the car
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLng(
-              LatLng(updatedCar.latitude, updatedCar.longitude)),
-        );
+        if (_mapController != null) {
+          debugPrint(
+              'Animating camera to new position: (${updatedCar.latitude}, ${updatedCar.longitude})');
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLng(
+                LatLng(updatedCar.latitude, updatedCar.longitude)),
+          );
+        } else {
+          debugPrint('Map controller is null - cannot animate camera');
+        }
+      } else {
+        debugPrint('Warning: Updated car data is null');
       }
     });
   }
 
   void _stopTracking() {
-    if (!_isTracking) return;
+    debugPrint('Stopping tracking for car: ${widget.car.id}');
+    if (!_isTracking) {
+      debugPrint('Tracking already inactive - ignoring request');
+      return;
+    }
 
     setState(() {
       _isTracking = false;
     });
 
+    debugPrint('Cancelling tracking timer');
     _trackingTimer?.cancel();
+    debugPrint('Clearing selected car in provider');
     Provider.of<CarProvider>(context, listen: false).setSelectedCar(null);
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('Building CarDetailsScreen for car: ${widget.car.id}');
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.car.name),
@@ -146,7 +203,7 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.speed),
+                      const Icon(Icons.speed),
                       const SizedBox(width: 8),
                       Text('${widget.car.speed} km/h'),
                     ],
@@ -154,12 +211,20 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.location_on),
+                      const Icon(Icons.location_on),
                       const SizedBox(width: 8),
                       Text(
                         'Lat: ${widget.car.latitude.toStringAsFixed(5)}, '
                         'Lng: ${widget.car.longitude.toStringAsFixed(5)}',
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.update),
+                      const SizedBox(width: 8),
+                      Text('Last updated: ${widget.car.lastUpdated}'),
                     ],
                   ),
                 ],
@@ -175,14 +240,23 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
               ),
               markers: _markers,
               onMapCreated: (controller) {
+                debugPrint('GoogleMap created. Setting map controller');
                 _mapController = controller;
               },
+              mapType: MapType.normal,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
+              zoomControlsEnabled: true,
+              zoomGesturesEnabled: true,
             ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isTracking ? _stopTracking : _startTracking,
+        onPressed: () {
+          debugPrint('Tracking button pressed. Current state: $_isTracking');
+          _isTracking ? _stopTracking() : _startTracking();
+        },
         icon: Icon(_isTracking ? Icons.stop : Icons.play_arrow),
         label: Text(_isTracking ? 'Stop Tracking' : 'Track This Car'),
       ),

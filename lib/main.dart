@@ -5,13 +5,8 @@ import 'providers/car_provider.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
-  // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Hive with Flutter
   await Hive.initFlutter();
-
-  // Open your Hive box (creates if it doesn't exist)
   await Hive.openBox('carsBox');
 
   runApp(

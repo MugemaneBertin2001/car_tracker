@@ -6,7 +6,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value=""/>
+            android:value="AIzaSyBbApTkY13GUG5UzAFtoqsBf1K8oA5Aa8I"/>
             
         <meta-data
             android:name="com.google.android.gms.version"
