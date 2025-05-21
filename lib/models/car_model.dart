@@ -1,95 +1,75 @@
-import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
 
-class Car {
+part 'car_model.g.dart';
+
+@HiveType(typeId: 0)
+class Car extends HiveObject {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String name;
-  final String status;
-  final double speed;
+
+  @HiveField(2)
   final double latitude;
+
+  @HiveField(3)
   final double longitude;
-  final String lastUpdated;
+
+  @HiveField(4)
+  final double speed;
+
+  @HiveField(5)
+  final String status;
+
+  // Removed model and year fields
+
+  @HiveField(6) // Adjusted Hive field index
+  final String timestamp;
 
   Car({
     required this.id,
     required this.name,
-    required this.status,
-    required this.speed,
     required this.latitude,
     required this.longitude,
-    required this.lastUpdated,
+    required this.speed,
+    required this.status,
+    // Removed model and year from constructor
+    required this.timestamp,
   });
 
   factory Car.fromJson(Map<String, dynamic> json) {
-    debugPrint('=== Parsing Car from JSON ===');
-    debugPrint('Raw JSON: $json');
-
-    try {
-      final id = json['id']?.toString() ?? 'unknown';
-      debugPrint('Parsed ID: $id');
-
-      final name = json['name']?.toString() ?? 'Unknown';
-      debugPrint('Parsed name: $name');
-
-      final status = json['status']?.toString() ?? 'Unknown';
-      debugPrint('Parsed status: $status');
-
-      final speed = _parseDouble(json['speed']);
-      debugPrint('Parsed speed: $speed');
-
-      final latitude = _parseDouble(json['latitude']);
-      final longitude = _parseDouble(json['longitude']);
-      debugPrint('Parsed location: ($latitude, $longitude)');
-
-      final lastUpdated =
-          json['lastUpdated']?.toString() ?? DateTime.now().toIso8601String();
-      debugPrint('Parsed lastUpdated: $lastUpdated');
-
-      debugPrint('=== Successfully parsed Car object ===');
-
-      return Car(
-        id: id,
-        name: name,
-        status: status,
-        speed: speed,
-        latitude: latitude,
-        longitude: longitude,
-        lastUpdated: lastUpdated,
-      );
-    } catch (e) {
-      debugPrint('ERROR parsing Car: $e');
-      debugPrint('=== Created fallback Car object ===');
-      return Car(
-        id: 'error',
-        name: 'Error Car',
-        status: 'Error',
-        speed: 0.0,
-        latitude: 0.0,
-        longitude: 0.0,
-        lastUpdated: DateTime.now().toIso8601String(),
-      );
-    }
+    return Car(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      speed: (json['speed'] as num).toDouble(),
+      status: json['status'] as String,
+      // Removed parsing for model and year
+      timestamp: json['timestamp'] as String,
+    );
   }
 
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-
-    if (value is String) {
-      try {
-        return double.parse(value);
-      } catch (e) {
-        debugPrint('Failed to parse double from string: $value');
-        return 0.0;
-      }
-    }
-
-    debugPrint('Unknown numeric type: ${value.runtimeType}');
-    return 0.0;
-  }
-
-  @override
-  String toString() {
-    return 'Car{id: $id, name: $name, status: $status, speed: $speed, position: ($latitude, $longitude)}';
+  Car copyWith({
+    String? id,
+    String? name,
+    double? latitude,
+    double? longitude,
+    double? speed,
+    String? status,
+    // Removed model and year from copyWith
+    String? timestamp,
+  }) {
+    return Car(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      speed: speed ?? this.speed,
+      status: status ?? this.status,
+      // Removed model and year from copyWith
+      timestamp: timestamp ?? this.timestamp,
+    );
   }
 }

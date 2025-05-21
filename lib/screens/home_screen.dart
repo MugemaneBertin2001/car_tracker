@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
+
 import '../providers/car_provider.dart';
 import '../models/car_model.dart';
 import 'car_details_screen.dart';
@@ -16,13 +18,13 @@ class _HomeScreenState extends State<HomeScreen> {
   GoogleMapController? _mapController;
   final TextEditingController _searchController = TextEditingController();
   final Set<Marker> _markers = {};
-  bool _isInitializing = true;
   MarkerId? _selectedMarkerId;
   bool _showFilters = false;
   bool _showCarList = false;
-  LatLngBounds? _visibleRegion;
 
-  // Default center position
+  Timer? _updateTimer;
+  final Duration _pollingInterval = const Duration(seconds: 10);
+
   static const CameraPosition _initialPosition = CameraPosition(
     target: LatLng(-1.94975, 30.05855),
     zoom: 14,
@@ -32,52 +34,52 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeData();
+      _initializeData().then((_) {
+        _startPolling();
+      });
     });
   }
 
   Future<void> _initializeData() async {
     final carProvider = Provider.of<CarProvider>(context, listen: false);
     await carProvider.fetchCars();
-
     if (mounted) {
-      setState(() {
-        _isInitializing = false;
-      });
       _zoomToFitAllMarkers(carProvider.cars);
     }
   }
 
-  void _zoomToFitAllMarkers(List<Car> cars) {
-    if (cars.isEmpty || _mapController == null) return;
-
-    final LatLngBounds bounds = _calculateBounds(cars);
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 100),
-    );
+  void _startPolling() {
+    _updateTimer = Timer.periodic(_pollingInterval, (timer) async {
+      await Provider.of<CarProvider>(context, listen: false).fetchCars();
+    });
   }
 
-  LatLngBounds _calculateBounds(List<Car> cars) {
-    double minLat = double.infinity;
-    double maxLat = -double.infinity;
-    double minLng = double.infinity;
-    double maxLng = -double.infinity;
+  void _stopPolling() {
+    _updateTimer?.cancel();
+  }
 
+  void _zoomToFitAllMarkers(List<Car> cars) {
+    if (cars.isEmpty || _mapController == null) return;
+    double minLat = double.infinity, maxLat = -double.infinity;
+    double minLng = double.infinity, maxLng = -double.infinity;
     for (final car in cars) {
       minLat = car.latitude < minLat ? car.latitude : minLat;
       maxLat = car.latitude > maxLat ? car.latitude : maxLat;
       minLng = car.longitude < minLng ? car.longitude : minLng;
       maxLng = car.longitude > maxLng ? car.longitude : maxLng;
     }
-
-    return LatLngBounds(
+    final LatLngBounds bounds = LatLngBounds(
       northeast: LatLng(maxLat, maxLng),
       southwest: LatLng(minLat, minLng),
+    );
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 100),
     );
   }
 
   @override
   void dispose() {
+    _stopPolling();
     _searchController.dispose();
     _mapController?.dispose();
     super.dispose();
@@ -85,9 +87,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Set<Marker> _buildMarkers(List<Car> cars) {
     final newMarkers = <Marker>{};
-
     for (final car in cars) {
-      final markerId = MarkerId(car.id.toString());
+      final markerId = MarkerId(car.id);
       newMarkers.add(
         Marker(
           markerId: markerId,
@@ -113,7 +114,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-
     return newMarkers;
   }
 
@@ -124,10 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context) => CarDetailsScreen(car: car),
         fullscreenDialog: true,
       ),
-    ).then((_) {
-      // Refresh data when returning from details screen
-      Provider.of<CarProvider>(context, listen: false).fetchCars();
-    });
+    );
   }
 
   Future<void> _showMarkerInfoWindow(MarkerId markerId) async {
@@ -263,27 +260,21 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async {
-              setState(() {
-                _isInitializing = true;
-              });
+              _stopPolling();
               await Provider.of<CarProvider>(context, listen: false)
                   .fetchCars();
-              if (mounted) {
-                setState(() {
-                  _isInitializing = false;
-                });
-              }
+              _startPolling();
             },
           ),
         ],
       ),
       body: Consumer<CarProvider>(
         builder: (context, carProvider, child) {
-          if (_isInitializing && carProvider.cars.isEmpty) {
+          if (!carProvider.isInitialLoadComplete) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (carProvider.hasError) {
+          if (carProvider.hasError && carProvider.cars.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -292,15 +283,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () async {
-                      setState(() {
-                        _isInitializing = true;
-                      });
+                      _stopPolling();
                       await carProvider.fetchCars();
-                      if (mounted) {
-                        setState(() {
-                          _isInitializing = false;
-                        });
-                      }
+                      _startPolling();
                     },
                     child: const Text('Try Again'),
                   ),
@@ -319,7 +304,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 markers: _markers,
                 onMapCreated: (controller) {
                   _mapController = controller;
-                  // Zoom to fit all markers when map is ready
                   if (carProvider.cars.isNotEmpty) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       _zoomToFitAllMarkers(carProvider.cars);
@@ -332,10 +316,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_selectedMarkerId != null) {
                     _mapController?.hideMarkerInfoWindow(_selectedMarkerId!);
                     _selectedMarkerId = null;
+                    carProvider.setSelectedCar(null);
                   }
                 },
               ),
-              // Search Bar
               Positioned(
                 top: 16,
                 left: 16,
@@ -345,11 +329,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(8),
                   child: TextField(
                     controller: _searchController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       hintText: "Search for cars...",
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: Icon(Icons.search),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                      contentPadding: EdgeInsets.symmetric(vertical: 15),
                       filled: true,
                       fillColor: Colors.white,
                     ),
@@ -359,7 +343,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              // Status Filter
               if (_showFilters && carProvider.cars.isNotEmpty)
                 Positioned(
                   top: 80,
@@ -383,11 +366,61 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-              // Car List Panel
+              if (carProvider.hasError && carProvider.cars.isNotEmpty)
+                Positioned(
+                  top: _showFilters ? 145 : 80,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    color: Colors.redAccent,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                    child: Text(
+                      'Update failed: ${carProvider.errorMessage}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ),
               _buildCarListPanel(carProvider),
-              // Floating action button to center on user location
               Positioned(
-                bottom: _showCarList ? 320 : 20,
+                bottom: _showCarList ? 300 : 0,
+                left: 0,
+                right: 0,
+                child: FutureBuilder<String>(
+                  future: carProvider.getLastUpdatedTime(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox.shrink();
+                    }
+                    if (snapshot.hasData &&
+                        (carProvider.cars.isNotEmpty || carProvider.hasError)) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 4, horizontal: 8),
+                        color: Colors.black.withOpacity(0.5),
+                        child: Text(
+                          'Last updated: ${snapshot.data}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+              Positioned(
+                bottom: _showCarList
+                    ? 320
+                    : 20 +
+                        (carProvider.cars.isNotEmpty || carProvider.hasError
+                            ? 20
+                            : 0) +
+                        (carProvider.hasError && carProvider.cars.isNotEmpty
+                            ? 25
+                            : 0),
                 right: 20,
                 child: FloatingActionButton(
                   heroTag: 'centerLocation',
@@ -400,9 +433,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Icon(Icons.center_focus_strong),
                 ),
               ),
-              // Floating action button to fit all markers in view
               Positioned(
-                bottom: _showCarList ? 380 : 80,
+                bottom: _showCarList
+                    ? 380
+                    : 80 +
+                        (carProvider.cars.isNotEmpty || carProvider.hasError
+                            ? 20
+                            : 0) +
+                        (carProvider.hasError && carProvider.cars.isNotEmpty
+                            ? 25
+                            : 0),
                 right: 20,
                 child: FloatingActionButton(
                   heroTag: 'fitMarkers',

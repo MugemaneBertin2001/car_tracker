@@ -10,138 +10,94 @@ class CarProvider with ChangeNotifier {
   String _errorMessage = '';
   bool _hasError = false;
   String? _selectedCarId;
+  bool _isInitialLoadComplete = false;
 
   List<Car> get cars => _cars;
   String get searchQuery => _searchQuery;
   String get filterStatus => _filterStatus;
   String get errorMessage => _errorMessage;
   bool get hasError => _hasError;
+  bool get isInitialLoadComplete => _isInitialLoadComplete;
 
   List<Car> get filteredCars {
-    debugPrint('Getting filtered cars...');
-    debugPrint('Total cars before filtering: ${_cars.length}');
-    debugPrint('Current filter status: $_filterStatus');
-    debugPrint('Current search query: "$_searchQuery"');
-
-    // First, filter by status
     List<Car> result = _filterStatus == 'All'
         ? List.from(_cars)
         : _cars.where((car) => car.status == _filterStatus).toList();
 
-    debugPrint('Cars after status filtering: ${result.length}');
-
-    // Then, filter by search query
     if (_searchQuery.isNotEmpty) {
       result = result
           .where((car) =>
               car.name.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
-      debugPrint('Cars after search query filtering: ${result.length}');
     }
-
-    // Log the filtered cars
-    debugPrint('=== Filtered Cars ===');
-    for (int i = 0; i < result.length; i++) {
-      final car = result[i];
-      debugPrint(
-          'Car #${i + 1}: ID=${car.id}, Name=${car.name}, Status=${car.status}, Position=(${car.latitude}, ${car.longitude})');
-    }
-    debugPrint('=====================');
-
     return result;
   }
 
   Future<void> fetchCars() async {
-    debugPrint('CarProvider: Fetching cars...');
     try {
-      _hasError = false;
-      _errorMessage = '';
-      notifyListeners();
-
       final cars = await _carService.fetchCars();
+      bool hasValidData = cars.isNotEmpty &&
+          cars.any((car) =>
+              car.id.isNotEmpty &&
+              (car.latitude != 0.0 || car.longitude != 0.0));
 
-      debugPrint('CarProvider: Received ${cars.length} cars from service');
-
-      // Check if we actually got cars with valid data
-      bool hasValidCars = false;
-      for (final car in cars) {
-        if (car.id != -1 && car.latitude != 0.0 && car.longitude != 0.0) {
-          hasValidCars = true;
-          break;
-        }
-      }
-
-      if (cars.isEmpty) {
-        debugPrint('CarProvider: Error - No cars received');
-        _hasError = true;
-        _errorMessage = 'No car data available. Please try again later.';
-      } else if (!hasValidCars) {
-        debugPrint(
-            'CarProvider: Error - No valid cars received, all have default/zero values');
-        _hasError = true;
-        _errorMessage = 'Invalid car data received. Please check API format.';
-      } else {
+      if (hasValidData) {
         _cars = cars;
-        debugPrint(
-            'CarProvider: Successfully updated cars list with ${_cars.length} cars');
-
-        // Log all cars for debugging
-        debugPrint('=== All Cars ===');
-        for (int i = 0; i < _cars.length; i++) {
-          final car = _cars[i];
-          debugPrint(
-              'Car #${i + 1}: ID=${car.id}, Name=${car.name}, Status=${car.status}, Position=(${car.latitude}, ${car.longitude})');
+        _hasError = false;
+        _errorMessage = '';
+      } else {
+        _hasError = true;
+        if (cars.isEmpty) {
+          _errorMessage = 'No car data available from the server.';
+        } else {
+          _errorMessage = 'Received invalid car data format from the server.';
         }
-        debugPrint('===============');
       }
     } catch (e) {
-      debugPrint('CarProvider: Error fetching cars: $e');
       _hasError = true;
-      _errorMessage = 'Failed to load car data: $e';
+      if (e.toString().contains('Failed host lookup') ||
+          e.toString().contains('Network is unreachable')) {
+        _errorMessage = 'Network error. Could not connect to the server.';
+      } else if (e.toString().contains('Timeout')) {
+        _errorMessage = 'Request timed out. Please try again.';
+      } else {
+        _errorMessage = 'Failed to load car data: ${e.toString()}';
+      }
     } finally {
+      _isInitialLoadComplete = true;
       notifyListeners();
     }
   }
 
   void setSearchQuery(String query) {
-    debugPrint('CarProvider: Setting search query to "$query"');
     _searchQuery = query;
     notifyListeners();
   }
 
   void setStatusFilter(String status) {
-    debugPrint('CarProvider: Setting status filter to "$status"');
     _filterStatus = status;
     notifyListeners();
   }
 
   Future<String> getLastUpdatedTime() async {
-    debugPrint('CarProvider: Getting last updated time');
     return await _carService.getLastUpdatedTime();
   }
 
-  // Methods for car tracking functionality
   void setSelectedCar(String? carId) {
-    debugPrint('CarProvider: Setting selected car ID to: $carId');
     _selectedCarId = carId;
     notifyListeners();
   }
 
   Car? getSelectedCar() {
     if (_selectedCarId == null) {
-      debugPrint('CarProvider: No car selected');
       return null;
     }
-
-    debugPrint('CarProvider: Getting selected car with ID: $_selectedCarId');
     try {
-      // Find the car in the list
-      final car = _cars.firstWhere((car) => car.id == _selectedCarId);
-      debugPrint(
-          'CarProvider: Found selected car: ${car.name} at position (${car.latitude}, ${car.longitude})');
+      final car = _cars.firstWhere((car) => car.id == _selectedCarId,
+          orElse: () => throw Exception('Car not found'));
       return car;
     } catch (e) {
-      debugPrint('CarProvider: Error finding selected car: $e');
+      _selectedCarId = null;
       return null;
     }
   }

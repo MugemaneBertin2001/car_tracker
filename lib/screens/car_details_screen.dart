@@ -26,59 +26,45 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('========== CAR DETAILS SCREEN ==========');
-    debugPrint('Initializing details screen for car: ${widget.car.id}');
-    debugPrint('Car initial data:');
-    debugPrint('  Name: ${widget.car.name}');
-    debugPrint('  Status: ${widget.car.status}');
-    debugPrint('  Speed: ${widget.car.speed} km/h');
-    debugPrint('  Position: (${widget.car.latitude}, ${widget.car.longitude})');
-    debugPrint('  Last Updated: ${widget.car.lastUpdated}');
-
-    // Log potential issues with coordinates
-    if (widget.car.latitude == 0.0 && widget.car.longitude == 0.0) {
-      debugPrint(
-          'WARNING: Car has default coordinates (0,0) - this may indicate missing or invalid location data');
+    _updateMarker(widget.car);
+    // Start tracking automatically when screen loads
+    if (!_isTracking) {
+      _startTracking();
     }
-
-    _updateMarker();
   }
 
   @override
   void dispose() {
-    debugPrint('Disposing CarDetailsScreen for car: ${widget.car.id}');
     _stopTracking();
     _mapController?.dispose();
     super.dispose();
   }
 
-  void _updateMarker() {
-    debugPrint('Updating marker for car: ${widget.car.id}');
-    debugPrint(
-        'Current position: (${widget.car.latitude}, ${widget.car.longitude})');
-
+  void _updateMarker(Car car) {
     setState(() {
+      // Create a single marker with the car's ID
       _markers = {
         Marker(
-          markerId: MarkerId(widget.car.id.toString()),
-          position: LatLng(widget.car.latitude, widget.car.longitude),
+          markerId: MarkerId(car.id),
+          position: LatLng(car.latitude, car.longitude),
           infoWindow: InfoWindow(
-            title: widget.car.name,
-            snippet: '${widget.car.speed} km/h - ${widget.car.status}',
+            title: car.name,
+            snippet: '${car.speed} km/h - ${car.status}',
           ),
-          icon: widget.car.status == 'Moving'
+          icon: car.status == 'Moving'
               ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
-              : BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              : car.status == 'Stopped'
+                  ? BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed)
+                  : BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueBlue),
         ),
       };
     });
-    debugPrint('Marker updated. Marker count: ${_markers.length}');
   }
 
   void _startTracking() {
-    debugPrint('Starting tracking for car: ${widget.car.id}');
     if (_isTracking) {
-      debugPrint('Tracking already active - ignoring request');
       return;
     }
 
@@ -86,71 +72,32 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
       _isTracking = true;
     });
 
-    debugPrint('Setting selected car in provider to ID: ${widget.car.id}');
     Provider.of<CarProvider>(context, listen: false)
         .setSelectedCar(widget.car.id);
 
-    // Update the car's position on the map every second
-    debugPrint('Setting up periodic tracking timer (1 second interval)');
-    _trackingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      debugPrint('Tracking timer tick for car: ${widget.car.id}');
+    _trackingTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       final carProvider = Provider.of<CarProvider>(context, listen: false);
       final updatedCar = carProvider.getSelectedCar();
 
       if (updatedCar != null) {
-        debugPrint('Retrieved updated car data:');
-        debugPrint('  ID: ${updatedCar.id}');
-        debugPrint('  Name: ${updatedCar.name}');
-        debugPrint('  Status: ${updatedCar.status}');
-        debugPrint('  Speed: ${updatedCar.speed} km/h');
-        debugPrint(
-            '  Position: (${updatedCar.latitude}, ${updatedCar.longitude})');
+        // Update marker with new position
+        _updateMarker(updatedCar);
 
-        // Check if position actually changed
-        final positionChanged = updatedCar.latitude != widget.car.latitude ||
-            updatedCar.longitude != widget.car.longitude;
-
-        debugPrint('Position changed: $positionChanged');
-
-        setState(() {
-          _markers = {
-            Marker(
-              markerId: MarkerId(updatedCar.id.toString()),
-              position: LatLng(updatedCar.latitude, updatedCar.longitude),
-              infoWindow: InfoWindow(
-                title: updatedCar.name,
-                snippet: '${updatedCar.speed} km/h - ${updatedCar.status}',
-              ),
-              icon: updatedCar.status == 'Moving'
-                  ? BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueGreen)
-                  : BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueRed),
-            ),
-          };
-        });
-
-        // Move camera to follow the car
+        // Only animate camera if map controller is initialized
         if (_mapController != null) {
-          debugPrint(
-              'Animating camera to new position: (${updatedCar.latitude}, ${updatedCar.longitude})');
           _mapController!.animateCamera(
             CameraUpdate.newLatLng(
                 LatLng(updatedCar.latitude, updatedCar.longitude)),
           );
-        } else {
-          debugPrint('Map controller is null - cannot animate camera');
         }
       } else {
-        debugPrint('Warning: Updated car data is null');
+        _stopTracking();
       }
     });
   }
 
   void _stopTracking() {
-    debugPrint('Stopping tracking for car: ${widget.car.id}');
     if (!_isTracking) {
-      debugPrint('Tracking already inactive - ignoring request');
       return;
     }
 
@@ -158,108 +105,139 @@ class _CarDetailsScreenState extends State<CarDetailsScreen> {
       _isTracking = false;
     });
 
-    debugPrint('Cancelling tracking timer');
     _trackingTimer?.cancel();
-    debugPrint('Clearing selected car in provider');
+    _trackingTimer = null;
     Provider.of<CarProvider>(context, listen: false).setSelectedCar(null);
   }
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('Building CarDetailsScreen for car: ${widget.car.id}');
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.car.name),
-      ),
-      body: Column(
-        children: [
-          // Car details card
-          Card(
-            margin: const EdgeInsets.all(16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.car.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
+    return Consumer<CarProvider>(
+      builder: (context, carProvider, child) {
+        final currentCar = carProvider.cars.firstWhere(
+          (car) => car.id == widget.car.id,
+          orElse: () {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.of(context).pop();
+            });
+            return Car(
+                id: widget.car.id,
+                name: 'Error',
+                latitude: 0.0,
+                longitude: 0.0,
+                speed: 0.0,
+                status: 'Error',
+                timestamp: '');
+          },
+        );
+
+        if (currentCar.name == 'Error') {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(currentCar.name),
+          ),
+          body: Column(
+            children: [
+              Card(
+                margin: const EdgeInsets.all(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        widget.car.status == 'Moving'
-                            ? Icons.directions_car
-                            : Icons.car_rental,
-                        color: widget.car.status == 'Moving'
-                            ? Colors.green
-                            : Colors.red,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(widget.car.status),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.speed),
-                      const SizedBox(width: 8),
-                      Text('${widget.car.speed} km/h'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on),
-                      const SizedBox(width: 8),
                       Text(
-                        'Lat: ${widget.car.latitude.toStringAsFixed(5)}, '
-                        'Lng: ${widget.car.longitude.toStringAsFixed(5)}',
+                        currentCar.name,
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            currentCar.status == 'Moving'
+                                ? Icons.directions_car
+                                : Icons.car_rental,
+                            color: currentCar.status == 'Moving'
+                                ? Colors.green
+                                : currentCar.status == 'Stopped'
+                                    ? Colors.red
+                                    : Colors.blue,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(currentCar.status),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.speed),
+                          const SizedBox(width: 8),
+                          Text('${currentCar.speed} km/h'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Lat: ${currentCar.latitude.toStringAsFixed(5)}, '
+                            'Lng: ${currentCar.longitude.toStringAsFixed(5)}',
+                          ),
+                        ],
+                      ),
+                      if (currentCar.timestamp.isNotEmpty)
+                        const SizedBox(height: 8),
+                      if (currentCar.timestamp.isNotEmpty)
+                        Row(
+                          children: [
+                            const Icon(Icons.update),
+                            const SizedBox(width: 8),
+                            Text('Last updated: ${currentCar.timestamp}'),
+                          ],
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.update),
-                      const SizedBox(width: 8),
-                      Text('Last updated: ${widget.car.lastUpdated}'),
-                    ],
+                ),
+              ),
+              Expanded(
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(currentCar.latitude, currentCar.longitude),
+                    zoom: 16,
                   ),
-                ],
+                  markers: _markers,
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                    if (currentCar.latitude != 0.0 ||
+                        currentCar.longitude != 0.0) {
+                      _mapController!.animateCamera(
+                        CameraUpdate.newLatLng(
+                            LatLng(currentCar.latitude, currentCar.longitude)),
+                      );
+                    }
+                  },
+                  mapType: MapType.normal,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  zoomControlsEnabled: true,
+                  zoomGesturesEnabled: true,
+                ),
               ),
-            ),
+            ],
           ),
-          // Map showing the car's location
-          Expanded(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: LatLng(widget.car.latitude, widget.car.longitude),
-                zoom: 16,
-              ),
-              markers: _markers,
-              onMapCreated: (controller) {
-                debugPrint('GoogleMap created. Setting map controller');
-                _mapController = controller;
-              },
-              mapType: MapType.normal,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: true,
-              zoomControlsEnabled: true,
-              zoomGesturesEnabled: true,
-            ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () {
+              _isTracking ? _stopTracking() : _startTracking();
+            },
+            icon: Icon(_isTracking ? Icons.stop : Icons.play_arrow),
+            label: Text(_isTracking ? 'Stop Tracking' : 'Track This Car'),
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          debugPrint('Tracking button pressed. Current state: $_isTracking');
-          _isTracking ? _stopTracking() : _startTracking();
-        },
-        icon: Icon(_isTracking ? Icons.stop : Icons.play_arrow),
-        label: Text(_isTracking ? 'Stop Tracking' : 'Track This Car'),
-      ),
+        );
+      },
     );
   }
 }
