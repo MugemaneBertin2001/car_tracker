@@ -19,8 +19,7 @@ A Flutter-based mobile application for real-time fleet tracking and monitoring. 
 - **Map Controls**: Center view, fit all markers, and zoom controls
 
 ## Screenshots
-
-*[Screenshots would be included here]*
+https://github.com/user-attachments/assets/9203e520-78ac-489e-8af2-70eb63330dd5
 
 ## System Requirements
 
