@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 class Car {
-  final int id;
+  final String id;
   final String name;
   final String status;
   final double speed;
@@ -20,33 +20,26 @@ class Car {
   });
 
   factory Car.fromJson(Map<String, dynamic> json) {
-    // Debug log to track what data is being parsed
     debugPrint('=== Parsing Car from JSON ===');
     debugPrint('Raw JSON: $json');
 
     try {
-      // Parse ID
-      final id = _parseId(json['id']);
+      final id = json['id']?.toString() ?? 'unknown';
       debugPrint('Parsed ID: $id');
 
-      // Parse name
       final name = json['name']?.toString() ?? 'Unknown';
       debugPrint('Parsed name: $name');
 
-      // Parse status
       final status = json['status']?.toString() ?? 'Unknown';
       debugPrint('Parsed status: $status');
 
-      // Parse speed
       final speed = _parseDouble(json['speed']);
       debugPrint('Parsed speed: $speed');
 
-      // Parse location
       final latitude = _parseDouble(json['latitude']);
       final longitude = _parseDouble(json['longitude']);
       debugPrint('Parsed location: ($latitude, $longitude)');
 
-      // Parse lastUpdated
       final lastUpdated =
           json['lastUpdated']?.toString() ?? DateTime.now().toIso8601String();
       debugPrint('Parsed lastUpdated: $lastUpdated');
@@ -64,10 +57,9 @@ class Car {
       );
     } catch (e) {
       debugPrint('ERROR parsing Car: $e');
-      // Return a default object when parsing fails
       debugPrint('=== Created fallback Car object ===');
       return Car(
-        id: -1,
+        id: 'error',
         name: 'Error Car',
         status: 'Error',
         speed: 0.0,
@@ -78,38 +70,10 @@ class Car {
     }
   }
 
-  // Helper method to safely parse ID
-  static int _parseId(dynamic value) {
-    if (value == null) return -1;
-
-    if (value is int) {
-      return value;
-    }
-
-    if (value is String) {
-      try {
-        return int.parse(value);
-      } catch (e) {
-        debugPrint('Failed to parse ID from string: $value');
-        return -1;
-      }
-    }
-
-    debugPrint('Unknown ID type: ${value.runtimeType}');
-    return -1;
-  }
-
-  // Helper method to safely parse doubles
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
-
-    if (value is double) {
-      return value;
-    }
-
-    if (value is int) {
-      return value.toDouble();
-    }
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
 
     if (value is String) {
       try {

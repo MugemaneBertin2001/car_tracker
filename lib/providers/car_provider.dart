@@ -9,7 +9,7 @@ class CarProvider with ChangeNotifier {
   String _filterStatus = 'All';
   String _errorMessage = '';
   bool _hasError = false;
-  int? _selectedCarId;
+  String? _selectedCarId;
 
   List<Car> get cars => _cars;
   String get searchQuery => _searchQuery;
@@ -121,7 +121,7 @@ class CarProvider with ChangeNotifier {
   }
 
   // Methods for car tracking functionality
-  void setSelectedCar(int? carId) {
+  void setSelectedCar(String? carId) {
     debugPrint('CarProvider: Setting selected car ID to: $carId');
     _selectedCarId = carId;
     notifyListeners();

@@ -6,7 +6,7 @@ import '../models/car_model.dart';
 
 class CarService {
   final String baseUrl =
-      'https://68260a2e397e48c91314bda1.mockapi.io/api/v1/cars';
+      'https://cars-pooling.onrender.com/cars';
   static const String _carBoxName = 'carsBox';
   static const String _carDataKey = 'carData';
   static const String _lastUpdatedKey = 'lastUpdated';
